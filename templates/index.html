@@ -1,0 +1,156 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Street Light Monitor</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://cdn.socket.io/4.7.5/socket.io.min.js"></script>
+  <style>
+    @keyframes pulse-dot { 0%,100%{opacity:1} 50%{opacity:.4} }
+    .pulse-dot { animation: pulse-dot 1.5s ease-in-out infinite; }
+  </style>
+</head>
+<body class="bg-gray-950 text-white min-h-screen flex items-center justify-center p-4">
+
+  <div class="w-full max-w-lg space-y-6">
+    <!-- Header -->
+    <div class="text-center space-y-1">
+      <h1 class="text-2xl font-bold tracking-tight">Street Light Monitor</h1>
+      <div id="conn" class="flex items-center justify-center gap-2 text-sm text-gray-400">
+        <span id="conn-dot" class="inline-block w-2 h-2 rounded-full bg-red-500"></span>
+        <span id="conn-text">Disconnected</span>
+      </div>
+    </div>
+
+    <!-- Main current display -->
+    <div class="bg-gray-900 rounded-2xl p-8 text-center border border-gray-800">
+      <p class="text-sm text-gray-400 uppercase tracking-widest mb-2">Current</p>
+      <p class="text-6xl font-mono font-bold tabular-nums" id="current-ma">0.0</p>
+      <p class="text-gray-400 text-lg mt-1">mA</p>
+      <div class="mt-4">
+        <span id="status-badge"
+              class="inline-block px-4 py-1.5 rounded-full text-sm font-medium bg-gray-800 text-gray-300">
+          No Load
+        </span>
+      </div>
+    </div>
+
+    <!-- Stats grid -->
+    <div class="grid grid-cols-3 gap-3">
+      <div class="bg-gray-900 rounded-xl p-4 text-center border border-gray-800">
+        <p class="text-xs text-gray-500 uppercase tracking-wider">Amps</p>
+        <p class="text-xl font-mono mt-1" id="current-a">0.000</p>
+      </div>
+      <div class="bg-gray-900 rounded-xl p-4 text-center border border-gray-800">
+        <p class="text-xs text-gray-500 uppercase tracking-wider">ADC</p>
+        <p class="text-xl font-mono mt-1" id="adc">0</p>
+      </div>
+      <div class="bg-gray-900 rounded-xl p-4 text-center border border-gray-800">
+        <p class="text-xs text-gray-500 uppercase tracking-wider">Offset</p>
+        <p class="text-xl font-mono mt-1" id="offset">0</p>
+      </div>
+    </div>
+
+    <!-- Chart -->
+    <div class="bg-gray-900 rounded-xl border border-gray-800 p-4">
+      <div class="flex items-center justify-between mb-3">
+        <p class="text-xs text-gray-500 uppercase tracking-wider">History (last 60 readings)</p>
+        <p class="text-xs text-gray-600" id="timestamp">--:--:--</p>
+      </div>
+      <canvas id="chart" height="120" class="w-full"></canvas>
+    </div>
+  </div>
+
+  <script>
+    const socket = io();
+    const history = [];
+    const MAX_POINTS = 60;
+    const canvas = document.getElementById("chart");
+    const ctx = canvas.getContext("2d");
+
+    // Status color map
+    const statusColors = {
+      "No Load":         ["bg-gray-800",   "text-gray-300"],
+      "Very Low Load":   ["bg-blue-900",   "text-blue-300"],
+      "Low Load":        ["bg-green-900",  "text-green-300"],
+      "Medium Load":     ["bg-yellow-900", "text-yellow-300"],
+      "High Load":       ["bg-orange-900", "text-orange-300"],
+      "Very High Load!": ["bg-red-900",    "text-red-300"],
+      "Reverse Current": ["bg-purple-900", "text-purple-300"],
+    };
+
+    function drawChart() {
+      const dpr = window.devicePixelRatio || 1;
+      const rect = canvas.getBoundingClientRect();
+      canvas.width = rect.width * dpr;
+      canvas.height = rect.height * dpr;
+      ctx.scale(dpr, dpr);
+
+      const w = rect.width;
+      const h = rect.height;
+      ctx.clearRect(0, 0, w, h);
+
+      if (history.length < 2) return;
+
+      const max = Math.max(10, ...history.map(v => Math.abs(v))) * 1.2;
+      const stepX = w / (MAX_POINTS - 1);
+
+      // Fill
+      ctx.beginPath();
+      ctx.moveTo(0, h);
+      history.forEach((v, i) => {
+        const x = i * stepX;
+        const y = h - (Math.abs(v) / max) * h;
+        ctx.lineTo(x, y);
+      });
+      ctx.lineTo((history.length - 1) * stepX, h);
+      ctx.closePath();
+      ctx.fillStyle = "rgba(59,130,246,0.1)";
+      ctx.fill();
+
+      // Line
+      ctx.beginPath();
+      history.forEach((v, i) => {
+        const x = i * stepX;
+        const y = h - (Math.abs(v) / max) * h;
+        i === 0 ? ctx.moveTo(x, y) : ctx.lineTo(x, y);
+      });
+      ctx.strokeStyle = "#3b82f6";
+      ctx.lineWidth = 2;
+      ctx.stroke();
+    }
+
+    socket.on("connect", () => {
+      document.getElementById("conn-dot").className = "inline-block w-2 h-2 rounded-full bg-emerald-500 pulse-dot";
+      document.getElementById("conn-text").textContent = "Connected";
+    });
+
+    socket.on("disconnect", () => {
+      document.getElementById("conn-dot").className = "inline-block w-2 h-2 rounded-full bg-red-500";
+      document.getElementById("conn-text").textContent = "Disconnected";
+    });
+
+    socket.on("sensor_update", (data) => {
+      document.getElementById("current-ma").textContent = data.current_mA.toFixed(1);
+      document.getElementById("current-a").textContent = data.current_A.toFixed(3);
+      document.getElementById("adc").textContent = data.adc;
+      document.getElementById("offset").textContent = data.offset;
+      document.getElementById("timestamp").textContent = data.timestamp || "--:--:--";
+
+      // Status badge
+      const badge = document.getElementById("status-badge");
+      const colors = statusColors[data.status] || statusColors["No Load"];
+      badge.className = `inline-block px-4 py-1.5 rounded-full text-sm font-medium ${colors[0]} ${colors[1]}`;
+      badge.textContent = data.status;
+
+      // Chart
+      history.push(data.current_mA);
+      if (history.length > MAX_POINTS) history.shift();
+      drawChart();
+    });
+
+    window.addEventListener("resize", drawChart);
+  </script>
+</body>
+</html>

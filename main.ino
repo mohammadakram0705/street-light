@@ -1,62 +1,127 @@
 // ================================================
-// ACS712 CURRENT SENSOR (CALIBRATED VERSION)
-// ESP32 - Accurate Reading with Noise Filtering
+// ACS712 CURRENT SENSOR + WiFi HTTP POST
+// ESP32 → Flask-SocketIO Server
 // ================================================
 
-#define SENSOR_PIN 34
+#include <WiFi.h>
+#include <HTTPClient.h>
 
-int offsetADC = 0;        // Will be auto-calibrated
-float sensitivity = 0.185; // For 5A module (V/A)
+// -------- WiFi Config --------
+const char* ssid     = "YOUR_WIFI_SSID";
+const char* password = "YOUR_WIFI_PASSWORD";
+
+// -------- Server Config --------
+const char* serverURL = "http://YOUR_SERVER_IP:5000/api/data";
+
+// -------- Sensor Config --------
+#define SENSOR_PIN 34
+int offsetADC = 0;
+float sensitivity = 0.185;  // 5A module (V/A)
+int samples = 50;
+
+// -------- State --------
+float current_mA = 0;
+float current_A = 0;
+int currentADC = 0;
 
 void setup() {
   Serial.begin(115200);
   delay(1000);
 
-  Serial.println("Calibrating... Keep NO LOAD connected!");
+  // Connect to WiFi
+  Serial.print("Connecting to WiFi");
+  WiFi.begin(ssid, password);
+  while (WiFi.status() != WL_CONNECTED) {
+    delay(500);
+    Serial.print(".");
+  }
+  Serial.println();
+  Serial.print("Connected! IP: ");
+  Serial.println(WiFi.localIP());
 
-  // 🔹 Auto Calibration (take 100 readings)
+  // Auto-calibrate (no load on sensor)
+  Serial.println("Calibrating... Keep NO LOAD connected!");
   long sum = 0;
   for (int i = 0; i < 100; i++) {
     sum += analogRead(SENSOR_PIN);
     delay(5);
   }
   offsetADC = sum / 100;
-
-  Serial.print("Calibration Done. Offset ADC = ");
+  Serial.print("Calibration done. Offset ADC = ");
   Serial.println(offsetADC);
-  Serial.println("----------------------------------");
 }
 
-void loop() {
-
-  // 🔹 Read multiple samples for stability
+// ================================================
+//  Read Current from ACS712
+// ================================================
+float readCurrent_mA() {
   long sum = 0;
-  int samples = 50;
-
   for (int i = 0; i < samples; i++) {
     sum += analogRead(SENSOR_PIN);
+    delay(2);
+  }
+  currentADC = sum / samples;
+  float voltage = (currentADC - offsetADC) * (3.3 / 4095.0);
+  return (voltage / sensitivity) * 1000.0;
+}
+
+// ================================================
+//  Get Status Text Based on Current
+// ================================================
+String getStatus(float mA) {
+  if (mA < 1.0 && mA > -1.0) return "No Load";
+  if (mA < 0)    return "Reverse Current";
+  if (mA < 10)   return "Very Low Load";
+  if (mA < 50)   return "Low Load";
+  if (mA < 200)  return "Medium Load";
+  if (mA < 1000) return "High Load";
+  return "Very High Load!";
+}
+
+// ================================================
+//  Send Data to Flask Server
+// ================================================
+void sendToServer() {
+  if (WiFi.status() != WL_CONNECTED) {
+    Serial.println("WiFi disconnected, reconnecting...");
+    WiFi.reconnect();
+    return;
   }
 
-  int adcValue = sum / samples;
+  HTTPClient http;
+  http.begin(serverURL);
+  http.addHeader("Content-Type", "application/json");
 
-  // 🔹 Convert ADC difference to voltage
-  float voltage = (adcValue - offsetADC) * (3.3 / 4095.0);
+  String json = "{\"current_mA\":" + String(current_mA, 1)
+              + ",\"current_A\":" + String(current_A, 3)
+              + ",\"adc\":" + String(currentADC)
+              + ",\"offset\":" + String(offsetADC)
+              + ",\"status\":\"" + getStatus(current_mA) + "\"}";
 
-  // 🔹 Convert voltage to current
-  float current = voltage / sensitivity;
+  int code = http.POST(json);
+  if (code > 0) {
+    Serial.print("POST OK → ");
+    Serial.println(code);
+  } else {
+    Serial.print("POST failed: ");
+    Serial.println(http.errorToString(code));
+  }
+  http.end();
+}
 
-  // 🔹 Convert to mA
-  float current_mA = current * 1000;
+// ================================================
+//  Main Loop
+// ================================================
+void loop() {
+  current_mA = readCurrent_mA();
+  current_A = current_mA / 1000.0;
 
-  // 🔹 Print values
-  Serial.print("ADC: ");
-  Serial.print(adcValue);
-
-  Serial.print(" | Current: ");
-  Serial.print(current, 3);
-  Serial.print(" A (");
+  // Serial debug
+  Serial.print("Current: ");
   Serial.print(current_mA, 1);
-  Serial.println(" mA)");
+  Serial.print(" mA | Status: ");
+  Serial.println(getStatus(current_mA));
 
+  sendToServer();
   delay(500);
 }
