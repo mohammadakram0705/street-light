@@ -7,8 +7,8 @@
 #include <HTTPClient.h>
 
 // -------- WiFi Config --------
-const char* ssid     = "YOUR_WIFI_SSID";
-const char* password = "YOUR_WIFI_PASSWORD";
+const char* ssid     = "Airtel_moha_4524";
+const char* password = "Air@09640";
 
 // -------- Server Config --------
 const char* serverURL = "http://YOUR_SERVER_IP:5000/api/data";
