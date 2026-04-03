@@ -11,7 +11,7 @@ const char* ssid     = "Airtel_moha_4524";
 const char* password = "Air@09640";
 
 // -------- Server Config --------
-const char* serverURL = "http://YOUR_SERVER_IP:5000/api/data";
+const char* serverURL = "http://192.168.1.6:5000/api/data";
 
 // -------- Sensor Config --------
 #define SENSOR_PIN 34
