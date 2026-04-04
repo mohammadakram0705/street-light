@@ -1,6 +1,5 @@
 // ================================================
-// ACS712 CURRENT SENSOR + WiFi HTTP POST
-// ESP32 → Flask-SocketIO Server
+// ACS712 STABLE CURRENT + FAULT FLAG (NEGATIVE)
 // ================================================
 
 #include <WiFi.h>
@@ -11,116 +10,146 @@ const char* ssid     = "Airtel_moha_4524";
 const char* password = "Air@09640";
 
 // -------- Server Config --------
-const char* serverURL = "http://192.168.1.6:5000/api/data";
+const char* serverURL = "http://192.168.1.20:5000/api/data";
 
 // -------- Sensor Config --------
 #define SENSOR_PIN 34
+float sensitivity = 0.185;
+int samples = 200;
+
+// -------- Calibration --------
 int offsetADC = 0;
-float sensitivity = 0.185;  // 5A module (V/A)
-int samples = 50;
+
+// -------- Filtering --------
+float filteredCurrent = 0;
+float alpha = 0.2;
 
 // -------- State --------
 float current_mA = 0;
 float current_A = 0;
 int currentADC = 0;
 
+// -------- Fault --------
+bool fault = false;
+
+// ================================================
 void setup() {
   Serial.begin(115200);
   delay(1000);
 
-  // Connect to WiFi
+  analogReadResolution(12);
+  analogSetPinAttenuation(SENSOR_PIN, ADC_11db);
+
   Serial.print("Connecting to WiFi");
   WiFi.begin(ssid, password);
   while (WiFi.status() != WL_CONNECTED) {
     delay(500);
     Serial.print(".");
   }
-  Serial.println();
-  Serial.print("Connected! IP: ");
-  Serial.println(WiFi.localIP());
+  Serial.println("\nConnected!");
 
-  // Auto-calibrate (no load on sensor)
-  Serial.println("Calibrating... Keep NO LOAD connected!");
+  Serial.println("Calibrating (NO LOAD!)...");
   long sum = 0;
-  for (int i = 0; i < 100; i++) {
+  for (int i = 0; i < 500; i++) {
     sum += analogRead(SENSOR_PIN);
-    delay(5);
+    delay(2);
   }
-  offsetADC = sum / 100;
-  Serial.print("Calibration done. Offset ADC = ");
+  offsetADC = sum / 500;
+
+  Serial.print("Offset ADC: ");
   Serial.println(offsetADC);
 }
 
 // ================================================
-//  Read Current from ACS712
-// ================================================
 float readCurrent_mA() {
+
   long sum = 0;
   for (int i = 0; i < samples; i++) {
     sum += analogRead(SENSOR_PIN);
-    delay(2);
+    delayMicroseconds(200);
   }
+
   currentADC = sum / samples;
+
   float voltage = (currentADC - offsetADC) * (3.3 / 4095.0);
-  return (voltage / sensitivity) * 1000.0;
+  float rawCurrent = (voltage / sensitivity) * 1000.0;
+
+  // Dead zone
+  if (abs(rawCurrent) < 10) rawCurrent = 0;
+
+  // EMA filter
+  filteredCurrent = (alpha * rawCurrent) + ((1 - alpha) * filteredCurrent);
+
+  return filteredCurrent;
 }
 
-// ================================================
-//  Get Status Text Based on Current
 // ================================================
 String getStatus(float mA) {
-  if (mA < 1.0 && mA > -1.0) return "No Load";
-  if (mA < 0)    return "Reverse Current";
-  if (mA < 10)   return "Very Low Load";
-  if (mA < 50)   return "Low Load";
-  if (mA < 200)  return "Medium Load";
-  if (mA < 1000) return "High Load";
-  return "Very High Load!";
+  if (abs(mA) < 10) return "No Load";
+  if (mA < 0) return "FAULT";
+  if (mA < 50) return "Low Load";
+  if (mA < 200) return "Medium Load";
+  return "Normal Load";
 }
 
 // ================================================
-//  Send Data to Flask Server
-// ================================================
 void sendToServer() {
+
   if (WiFi.status() != WL_CONNECTED) {
-    Serial.println("WiFi disconnected, reconnecting...");
     WiFi.reconnect();
     return;
+  }
+
+  // 🔥 Fault condition
+  if (current_mA < 0) {
+    fault = true;
+  } else {
+    fault = false;
   }
 
   HTTPClient http;
   http.begin(serverURL);
   http.addHeader("Content-Type", "application/json");
 
-  String json = "{\"current_mA\":" + String(current_mA, 1)
-              + ",\"current_A\":" + String(current_A, 3)
-              + ",\"adc\":" + String(currentADC)
-              + ",\"offset\":" + String(offsetADC)
-              + ",\"status\":\"" + getStatus(current_mA) + "\"}";
+  // ✅ JSON with fault field
+  String json = "{";
+  json += "\"current_mA\":" + String(current_mA, 2) + ",";
+  json += "\"current_A\":" + String(current_A, 4) + ",";
+  json += "\"adc\":" + String(currentADC) + ",";
+  json += "\"offset\":" + String(offsetADC) + ",";
+  json += "\"status\":\"" + getStatus(current_mA) + "\",";
+  json += "\"fault\":" + String(fault ? "true" : "false");
+  json += "}";
 
   int code = http.POST(json);
+
   if (code > 0) {
-    Serial.print("POST OK → ");
-    Serial.println(code);
+    Serial.println("POST OK");
   } else {
-    Serial.print("POST failed: ");
-    Serial.println(http.errorToString(code));
+    Serial.println("POST FAILED");
   }
+
   http.end();
 }
 
 // ================================================
-//  Main Loop
-// ================================================
 void loop() {
+
   current_mA = readCurrent_mA();
   current_A = current_mA / 1000.0;
 
-  // Serial debug
-  Serial.print("Current: ");
-  Serial.print(current_mA, 1);
-  Serial.print(" mA | Status: ");
-  Serial.println(getStatus(current_mA));
+  Serial.print("ADC: ");
+  Serial.print(currentADC);
+
+  Serial.print(" | Current: ");
+  Serial.print(current_mA, 2);
+  Serial.print(" mA | ");
+
+  if (current_mA < 0) {
+    Serial.println("⚠️ FAULT DETECTED");
+  } else {
+    Serial.println(getStatus(current_mA));
+  }
 
   sendToServer();
   delay(500);
