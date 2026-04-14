@@ -1,156 +1,584 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Street Light Monitor</title>
-  <script src="https://cdn.tailwindcss.com"></script>
-  <script src="https://cdn.socket.io/4.7.5/socket.io.min.js"></script>
-  <style>
-    @keyframes pulse-dot { 0%,100%{opacity:1} 50%{opacity:.4} }
-    .pulse-dot { animation: pulse-dot 1.5s ease-in-out infinite; }
-  </style>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Smart Street Light Monitoring System</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.7.2/socket.io.min.js"></script>
+<link href="https://fonts.googleapis.com/css2?family=Rajdhani:wght@500;600;700&family=Share+Tech+Mono&family=Exo+2:wght@300;400;600;700&display=swap" rel="stylesheet">
+<style>
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+:root{
+  --bg:#0b0f1a;--panel:#0e1525;--card:#111c30;--sidebar:#0a1120;
+  --green:#00e676;--cyan:#00e5ff;--red:#ff1744;--amber:#ffc400;--purple:#b388ff;--blue:#448aff;
+  --txt:#e8f0fe;--txt2:#8899bb;--muted:#445577;
+  --border:rgba(0,230,118,.12);
+  --gG:0 0 14px rgba(0,230,118,.5);--gR:0 0 14px rgba(255,23,68,.5);
+  --ff:'Exo 2',sans-serif;--fd:'Rajdhani',sans-serif;--fm:'Share Tech Mono',monospace;
+}
+body{background:var(--bg);color:var(--txt);font-family:var(--ff);min-height:100vh;display:flex;flex-direction:column}
+
+/* TOPBAR */
+.topbar{background:var(--panel);border-bottom:1px solid var(--border);display:flex;align-items:center;padding:0 24px;height:68px;gap:18px;position:sticky;top:0;z-index:100}
+.logo{display:flex;align-items:center;gap:12px}
+.logo-ic{width:44px;height:44px;background:linear-gradient(135deg,#0a2a1a,#0d3d20);border:1px solid rgba(0,230,118,.3);border-radius:10px;display:flex;align-items:center;justify-content:center;font-size:22px}
+.logo h1{font-family:var(--fd);font-size:18px;font-weight:700;letter-spacing:1px}
+.logo h1 span{color:var(--green)}
+.logo p{font-size:9px;letter-spacing:2px;color:var(--muted);text-transform:uppercase;margin-top:1px}
+.badge-online{display:flex;align-items:center;gap:7px;background:rgba(0,230,118,.08);border:1px solid rgba(0,230,118,.25);border-radius:20px;padding:5px 14px;font-size:10px;font-weight:700;letter-spacing:1.5px;color:var(--green);text-transform:uppercase;margin-left:20px}
+.dot{width:7px;height:7px;border-radius:50%;background:var(--green);box-shadow:var(--gG);animation:pulse 1.6s ease-in-out infinite}
+@keyframes pulse{0%,100%{opacity:1;transform:scale(1)}50%{opacity:.5;transform:scale(.8)}}
+.conn-ind{width:9px;height:9px;border-radius:50%;background:var(--red);margin-left:6px;flex-shrink:0;transition:background .4s,box-shadow .4s}
+.conn-ind.live{background:var(--green);box-shadow:var(--gG)}
+.top-right{margin-left:auto;display:flex;align-items:center;gap:20px}
+.clock{text-align:right;font-family:var(--fm);font-size:11px;color:var(--txt2);line-height:1.7}
+.user{display:flex;align-items:center;gap:10px;background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.08);border-radius:10px;padding:7px 14px;cursor:pointer}
+.avatar{width:32px;height:32px;border-radius:50%;background:linear-gradient(135deg,#6a1bd4,#3d0f90);display:flex;align-items:center;justify-content:center;font-weight:700;font-size:14px}
+.uname{font-size:13px;font-weight:600}.urole{font-size:9px;color:var(--muted);letter-spacing:1px}
+
+/* LAYOUT */
+.layout{display:flex;flex:1}
+
+/* SIDEBAR */
+.sidebar{width:210px;flex-shrink:0;background:var(--sidebar);border-right:1px solid var(--border);display:flex;flex-direction:column;padding:20px 0;position:sticky;top:68px;height:calc(100vh - 68px);overflow-y:auto}
+.nav a{display:flex;align-items:center;gap:12px;padding:11px 20px;font-size:13px;font-weight:500;color:var(--txt2);text-decoration:none;transition:.2s}
+.nav a:hover{background:rgba(255,255,255,.03);color:var(--txt)}
+.nav a.active{background:rgba(0,230,118,.08);color:var(--green);border-left:2px solid var(--green)}
+.nav .ic{font-size:15px;width:20px;text-align:center}
+.nbadge{margin-left:auto;background:var(--red);color:#fff;font-size:10px;font-weight:700;min-width:18px;height:18px;border-radius:9px;display:flex;align-items:center;justify-content:center;padding:0 4px}
+.sidebar-card{margin:auto 14px 14px;background:linear-gradient(135deg,#091830,#102040);border:1px solid rgba(68,138,255,.2);border-radius:12px;padding:16px;text-align:center}
+.sidebar-card .si{font-size:46px;margin-bottom:8px;display:block;filter:drop-shadow(0 0 12px rgba(255,200,50,.5))}
+.sidebar-card h3{font-family:var(--fd);font-size:14px;font-weight:700}
+.sidebar-card h3 span{color:var(--cyan)}
+.sidebar-card p{font-size:10px;color:var(--txt2);margin-top:5px;line-height:1.5}
+
+/* MAIN */
+.main{flex:1;padding:20px;display:flex;flex-direction:column;gap:18px;overflow-y:auto}
+
+/* STAT CARDS */
+.stats{display:grid;grid-template-columns:repeat(5,1fr);gap:14px}
+.sc{border-radius:12px;padding:18px 16px;display:flex;align-items:center;gap:13px;border:1px solid transparent;transition:transform .2s;animation:fadeUp .5s ease both}
+.sc:hover{transform:translateY(-2px)}
+@keyframes fadeUp{from{opacity:0;transform:translateY(14px)}to{opacity:1;transform:translateY(0)}}
+.sc:nth-child(1){animation-delay:.05s}.sc:nth-child(2){animation-delay:.1s}.sc:nth-child(3){animation-delay:.15s}.sc:nth-child(4){animation-delay:.2s}.sc:nth-child(5){animation-delay:.25s}
+.sc.blue{background:#0d1e3a;border-color:rgba(68,138,255,.3)}
+.sc.green{background:#0a2218;border-color:rgba(0,230,118,.3)}
+.sc.red{background:#2a0a0e;border-color:rgba(255,23,68,.3)}
+.sc.amber{background:#221800;border-color:rgba(255,196,0,.3)}
+.sc.purple{background:#170d2e;border-color:rgba(179,136,255,.3)}
+.sic{width:44px;height:44px;border-radius:10px;display:flex;align-items:center;justify-content:center;font-size:20px;flex-shrink:0}
+.sc.blue .sic{background:rgba(68,138,255,.15)}.sc.green .sic{background:rgba(0,230,118,.15)}
+.sc.red .sic{background:rgba(255,23,68,.15)}.sc.amber .sic{background:rgba(255,196,0,.15)}.sc.purple .sic{background:rgba(179,136,255,.15)}
+.sval{font-family:var(--fd);font-size:26px;font-weight:700;line-height:1;transition:all .3s}
+.sc.blue .sval{color:var(--blue)}.sc.green .sval{color:var(--green)}
+.sc.red .sval{color:var(--red)}.sc.amber .sval{color:var(--amber)}.sc.purple .sval{color:var(--purple)}
+.slbl{font-size:9px;letter-spacing:1.4px;color:var(--muted);text-transform:uppercase;margin-top:3px}
+
+/* MID ROW */
+.mid{display:grid;grid-template-columns:1fr 400px;gap:18px}
+
+/* PANEL */
+.panel{background:var(--card);border:1px solid var(--border);border-radius:14px;padding:18px}
+.ph{display:flex;align-items:center;justify-content:space-between;margin-bottom:16px}
+.ptitle{display:flex;align-items:center;gap:9px;font-family:var(--fd);font-size:14px;font-weight:600;letter-spacing:1px;text-transform:uppercase}
+.va{font-size:12px;color:var(--green);font-weight:600;cursor:pointer;text-decoration:none}
+.va.red{color:var(--red)}
+
+/* LIGHT CARDS */
+.lgrid{display:grid;grid-template-columns:1fr 1fr;gap:14px}
+.lcard{border-radius:12px;border:1px solid rgba(0,230,118,.22);padding:14px;background:linear-gradient(180deg,#0c2215,#091a10);transition:all .35s}
+.lcard.fault{border-color:rgba(255,23,68,.35);background:linear-gradient(180deg,#200b0e,#160508)}
+.lh{display:flex;align-items:center;justify-content:space-between;margin-bottom:11px}
+.stag{background:rgba(0,230,118,.15);border:1px solid rgba(0,230,118,.3);border-radius:5px;font-size:9px;font-weight:700;letter-spacing:1px;color:var(--green);padding:2px 8px;transition:all .35s}
+.lcard.fault .stag{background:rgba(255,23,68,.12);border-color:rgba(255,23,68,.3);color:var(--red)}
+.lno{font-family:var(--fm);font-size:10px;color:var(--muted)}
+.bwrap{text-align:center;padding:6px 0}
+.bulb{font-size:32px;transition:filter .4s}
+.lcard:not(.fault) .bulb{filter:drop-shadow(0 0 12px rgba(0,230,118,.6))}
+.lcard.fault .bulb{filter:drop-shadow(0 0 10px rgba(255,196,0,.45))}
+.sname{font-size:10px;color:var(--txt2);letter-spacing:1px;margin-top:8px}
+.cval{font-family:var(--fd);font-size:28px;font-weight:700;color:var(--green);margin:3px 0;transition:color .35s}
+.lcard.fault .cval{color:var(--red)}
+.sbadge{display:inline-block;padding:3px 12px;border-radius:20px;font-size:10px;font-weight:700;letter-spacing:1px;transition:all .3s}
+.sbadge.ok{background:rgba(0,230,118,.15);border:1px solid rgba(0,230,118,.4);color:var(--green)}
+.sbadge.fault{background:var(--red);color:#fff;box-shadow:var(--gR);animation:fblink .75s ease-in-out infinite}
+@keyframes fblink{0%,100%{opacity:1}50%{opacity:.55}}
+.lupd{font-size:9px;color:var(--muted);margin-top:8px;font-family:var(--fm)}
+
+/* SPARKLINE */
+.spark{margin-top:10px;height:40px}
+.spark svg{width:100%;height:100%}
+
+/* CHART */
+.chart-area{position:relative;height:220px;margin-top:8px}
+.chart-area svg{width:100%;height:100%}
+.cl-legend{display:flex;gap:12px}
+.cl{display:flex;align-items:center;gap:5px;font-size:10px;color:var(--txt2)}
+.cld{width:8px;height:8px;border-radius:50%}
+
+/* ALERTS TABLE */
+.atbl{width:100%;border-collapse:collapse}
+.atbl th{text-align:left;font-size:10px;letter-spacing:1px;color:var(--muted);text-transform:uppercase;padding:0 12px 10px;border-bottom:1px solid rgba(255,255,255,.05)}
+.atbl td{padding:12px 12px;font-size:12px;color:var(--txt2);border-bottom:1px solid rgba(255,255,255,.03);font-family:var(--fm)}
+.atbl tr:hover td{background:rgba(255,255,255,.02)}
+.tag{display:inline-block;padding:3px 10px;border-radius:5px;font-size:9px;font-weight:700;letter-spacing:1px}
+.tag.f{background:rgba(255,23,68,.2);color:var(--red);border:1px solid rgba(255,23,68,.3)}
+.tag.p{background:rgba(255,196,0,.15);color:var(--amber);border:1px solid rgba(255,196,0,.3)}
+.tag.ok{background:rgba(0,230,118,.12);color:var(--green);border:1px solid rgba(0,230,118,.3)}
+.nodata{text-align:center;color:var(--muted);padding:22px;font-family:var(--fm);font-size:12px}
+
+/* TOAST */
+#toast{position:fixed;top:78px;right:18px;z-index:999;display:flex;flex-direction:column;gap:8px;pointer-events:none}
+.ti{background:#1a0608;border:1px solid rgba(255,23,68,.5);border-radius:10px;padding:12px 16px;min-width:260px;box-shadow:0 4px 24px rgba(0,0,0,.5);animation:tin .3s ease;pointer-events:all}
+.ti.ok{background:#091a0e;border-color:rgba(0,230,118,.4)}
+@keyframes tin{from{opacity:0;transform:translateX(20px)}to{opacity:1;transform:translateX(0)}}
+.tt{font-family:var(--fd);font-size:13px;font-weight:700;color:var(--red);margin-bottom:4px}
+.ti.ok .tt{color:var(--green)}
+.tm{font-size:11px;color:var(--txt2);font-family:var(--fm)}
+
+/* FOOTER */
+footer{background:var(--panel);border-top:1px solid var(--border);padding:13px 24px;display:flex;align-items:center;justify-content:space-between}
+footer p{font-size:10px;color:var(--muted)}
+.fl a{font-size:13px;color:var(--muted);text-decoration:none;margin-left:14px;transition:.2s}
+.fl a:hover{color:var(--green)}
+</style>
 </head>
-<body class="bg-gray-950 text-white min-h-screen flex items-center justify-center p-4">
+<body>
 
-  <div class="w-full max-w-lg space-y-6">
-    <!-- Header -->
-    <div class="text-center space-y-1">
-      <h1 class="text-2xl font-bold tracking-tight">Street Light Monitor</h1>
-      <div id="conn" class="flex items-center justify-center gap-2 text-sm text-gray-400">
-        <span id="conn-dot" class="inline-block w-2 h-2 rounded-full bg-red-500"></span>
-        <span id="conn-text">Disconnected</span>
-      </div>
-    </div>
+<div id="toast"></div>
 
-    <!-- Main current display -->
-    <div class="bg-gray-900 rounded-2xl p-8 text-center border border-gray-800">
-      <p class="text-sm text-gray-400 uppercase tracking-widest mb-2">Current</p>
-      <p class="text-6xl font-mono font-bold tabular-nums" id="current-ma">0.0</p>
-      <p class="text-gray-400 text-lg mt-1">mA</p>
-      <div class="mt-4">
-        <span id="status-badge"
-              class="inline-block px-4 py-1.5 rounded-full text-sm font-medium bg-gray-800 text-gray-300">
-          No Load
-        </span>
-      </div>
-    </div>
-
-    <!-- Stats grid -->
-    <div class="grid grid-cols-3 gap-3">
-      <div class="bg-gray-900 rounded-xl p-4 text-center border border-gray-800">
-        <p class="text-xs text-gray-500 uppercase tracking-wider">Amps</p>
-        <p class="text-xl font-mono mt-1" id="current-a">0.000</p>
-      </div>
-      <div class="bg-gray-900 rounded-xl p-4 text-center border border-gray-800">
-        <p class="text-xs text-gray-500 uppercase tracking-wider">ADC</p>
-        <p class="text-xl font-mono mt-1" id="adc">0</p>
-      </div>
-      <div class="bg-gray-900 rounded-xl p-4 text-center border border-gray-800">
-        <p class="text-xs text-gray-500 uppercase tracking-wider">Offset</p>
-        <p class="text-xl font-mono mt-1" id="offset">0</p>
-      </div>
-    </div>
-
-    <!-- Chart -->
-    <div class="bg-gray-900 rounded-xl border border-gray-800 p-4">
-      <div class="flex items-center justify-between mb-3">
-        <p class="text-xs text-gray-500 uppercase tracking-wider">History (last 60 readings)</p>
-        <p class="text-xs text-gray-600" id="timestamp">--:--:--</p>
-      </div>
-      <canvas id="chart" height="120" class="w-full"></canvas>
+<!-- TOPBAR -->
+<header class="topbar">
+  <div class="logo">
+    <div class="logo-ic">🌿</div>
+    <div>
+      <h1>SMART <span>STREET LIGHT</span></h1>
+      <p>Monitoring System</p>
     </div>
   </div>
+  <div class="badge-online"><span class="dot"></span>SYSTEM ONLINE</div>
+  <span class="conn-ind" id="conn-ind" title="Socket.IO connection"></span>
+  <div class="top-right">
+    <div class="clock"><div id="cdate">—</div><div id="ctime">—</div></div>
+    <div class="user">
+      <div class="avatar">A</div>
+      <div><div class="uname">Admin</div><div class="urole">Control Panel</div></div>
+      <span style="color:var(--muted);margin-left:4px;font-size:11px;">▾</span>
+    </div>
+  </div>
+</header>
 
-  <script>
-    const socket = io();
-    const history = [];
-    const MAX_POINTS = 60;
-    const canvas = document.getElementById("chart");
-    const ctx = canvas.getContext("2d");
+<div class="layout">
 
-    // Status color map
-    const statusColors = {
-      "No Load":         ["bg-gray-800",   "text-gray-300"],
-      "Very Low Load":   ["bg-blue-900",   "text-blue-300"],
-      "Low Load":        ["bg-green-900",  "text-green-300"],
-      "Medium Load":     ["bg-yellow-900", "text-yellow-300"],
-      "High Load":       ["bg-orange-900", "text-orange-300"],
-      "Very High Load!": ["bg-red-900",    "text-red-300"],
-      "Reverse Current": ["bg-purple-900", "text-purple-300"],
-    };
+  <!-- SIDEBAR -->
+  <aside class="sidebar">
+    <nav class="nav">
+      <a class="active" href="#"><span class="ic">⊞</span>Dashboard</a>
+      <a href="#"><span class="ic">💡</span>All Street Lights</a>
+      <a href="#"><span class="ic">⚠</span>Fault Alerts<span class="nbadge" id="fault-count">0</span></a>
+      <a href="#"><span class="ic">📊</span>Analytics</a>
+      <a href="#"><span class="ic">⚙</span>Settings</a>
+    </nav>
+    <div class="sidebar-card">
+      <span class="si">🌃</span>
+      <h3>Smart City<br><span>Better Tomorrow!</span></h3>
+      <p>Real-time monitoring makes cities smarter and brighter.</p>
+    </div>
+  </aside>
 
-    function drawChart() {
-      const dpr = window.devicePixelRatio || 1;
-      const rect = canvas.getBoundingClientRect();
-      canvas.width = rect.width * dpr;
-      canvas.height = rect.height * dpr;
-      ctx.scale(dpr, dpr);
+  <!-- MAIN -->
+  <main class="main">
 
-      const w = rect.width;
-      const h = rect.height;
-      ctx.clearRect(0, 0, w, h);
+    <!-- STAT CARDS -->
+    <div class="stats">
+      <div class="sc blue">
+        <div class="sic">💡</div>
+        <div><div class="sval">2</div><div class="slbl">Total Lights</div></div>
+      </div>
+      <div class="sc green">
+        <div class="sic">✅</div>
+        <div><div class="sval" id="s-working">2</div><div class="slbl">Working Fine</div></div>
+      </div>
+      <div class="sc red">
+        <div class="sic">⚠️</div>
+        <div><div class="sval" id="s-fault">0</div><div class="slbl">Fault Detected</div></div>
+      </div>
+      <div class="sc amber">
+        <div class="sic">⚡</div>
+        <div><div class="sval" id="s-power">— mA</div><div class="slbl">Total Current</div></div>
+      </div>
+      <div class="sc purple">
+        <div class="sic">📍</div>
+        <div><div class="sval" id="s-street">—</div><div class="slbl">Streets Monitored</div></div>
+      </div>
+    </div>
 
-      if (history.length < 2) return;
+    <!-- MID ROW -->
+    <div class="mid">
 
-      const max = Math.max(10, ...history.map(v => Math.abs(v))) * 1.2;
-      const stepX = w / (MAX_POINTS - 1);
+      <!-- LIVE LIGHT STATUS -->
+      <div class="panel">
+        <div class="ph">
+          <div class="ptitle">〜 Live Street Light Status</div>
+          <a href="#" class="va">View All Lights →</a>
+        </div>
+        <div class="lgrid">
 
-      // Fill
-      ctx.beginPath();
-      ctx.moveTo(0, h);
-      history.forEach((v, i) => {
-        const x = i * stepX;
-        const y = h - (Math.abs(v) / max) * h;
-        ctx.lineTo(x, y);
-      });
-      ctx.lineTo((history.length - 1) * stepX, h);
-      ctx.closePath();
-      ctx.fillStyle = "rgba(59,130,246,0.1)";
-      ctx.fill();
+          <!-- LED 1 INA219 -->
+          <div class="lcard" id="card1">
+            <div class="lh">
+              <span class="stag" id="tag1">—</span>
+              <span class="lno" id="lno1">Light No: —</span>
+            </div>
+            <div class="bwrap"><span class="bulb" id="bulb1">💡</span></div>
+            <div class="sname">INA219 SENSOR</div>
+            <div class="cval" id="val1">— mA</div>
+            <span class="sbadge ok" id="badge1">WAITING…</span>
+            <div class="lupd" id="upd1">Waiting for data…</div>
+            <div class="spark">
+              <svg viewBox="0 0 160 38" preserveAspectRatio="none">
+                <defs>
+                  <linearGradient id="g1ok" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="0%" stop-color="#00e676" stop-opacity=".3"/>
+                    <stop offset="100%" stop-color="#00e676" stop-opacity="0"/>
+                  </linearGradient>
+                  <linearGradient id="g1er" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="0%" stop-color="#ff1744" stop-opacity=".25"/>
+                    <stop offset="100%" stop-color="#ff1744" stop-opacity="0"/>
+                  </linearGradient>
+                </defs>
+                <polygon id="area1" fill="url(#g1ok)" points="0,38 160,38"/>
+                <polyline id="line1" fill="none" stroke="#00e676" stroke-width="1.8" points=""/>
+                <g id="dots1"></g>
+              </svg>
+            </div>
+          </div>
 
-      // Line
-      ctx.beginPath();
-      history.forEach((v, i) => {
-        const x = i * stepX;
-        const y = h - (Math.abs(v) / max) * h;
-        i === 0 ? ctx.moveTo(x, y) : ctx.lineTo(x, y);
-      });
-      ctx.strokeStyle = "#3b82f6";
-      ctx.lineWidth = 2;
-      ctx.stroke();
-    }
+          <!-- LED 2 ACS712 -->
+          <div class="lcard" id="card2">
+            <div class="lh">
+              <span class="stag" id="tag2">—</span>
+              <span class="lno" id="lno2">Light No: —</span>
+            </div>
+            <div class="bwrap"><span class="bulb" id="bulb2">💡</span></div>
+            <div class="sname">ACS712 SENSOR</div>
+            <div class="cval" id="val2">— mA</div>
+            <span class="sbadge ok" id="badge2">WAITING…</span>
+            <div class="lupd" id="upd2">Waiting for data…</div>
+            <div class="spark">
+              <svg viewBox="0 0 160 38" preserveAspectRatio="none">
+                <defs>
+                  <linearGradient id="g2ok" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="0%" stop-color="#00e676" stop-opacity=".3"/>
+                    <stop offset="100%" stop-color="#00e676" stop-opacity="0"/>
+                  </linearGradient>
+                  <linearGradient id="g2er" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="0%" stop-color="#ff1744" stop-opacity=".25"/>
+                    <stop offset="100%" stop-color="#ff1744" stop-opacity="0"/>
+                  </linearGradient>
+                </defs>
+                <polygon id="area2" fill="url(#g2ok)" points="0,38 160,38"/>
+                <polyline id="line2" fill="none" stroke="#00e676" stroke-width="1.8" points=""/>
+                <g id="dots2"></g>
+              </svg>
+            </div>
+          </div>
 
-    socket.on("connect", () => {
-      document.getElementById("conn-dot").className = "inline-block w-2 h-2 rounded-full bg-emerald-500 pulse-dot";
-      document.getElementById("conn-text").textContent = "Connected";
-    });
+        </div>
+      </div>
 
-    socket.on("disconnect", () => {
-      document.getElementById("conn-dot").className = "inline-block w-2 h-2 rounded-full bg-red-500";
-      document.getElementById("conn-text").textContent = "Disconnected";
-    });
+      <!-- LIVE CHART -->
+      <div class="panel">
+        <div class="ph">
+          <div class="ptitle">⚡ Current – Live (24h)</div>
+          <div class="cl-legend">
+            <div class="cl"><span class="cld" style="background:var(--green)"></span>LED 1</div>
+            <div class="cl"><span class="cld" style="background:var(--red)"></span>LED 2</div>
+          </div>
+        </div>
+        <div class="chart-area">
+          <svg viewBox="0 0 380 200" preserveAspectRatio="none">
+            <line x1="34" y1="10"  x2="375" y2="10"  stroke="#1a2a3a" stroke-width="1"/>
+            <line x1="34" y1="52"  x2="375" y2="52"  stroke="#1a2a3a" stroke-width="1"/>
+            <line x1="34" y1="94"  x2="375" y2="94"  stroke="#1a2a3a" stroke-width="1"/>
+            <line x1="34" y1="136" x2="375" y2="136" stroke="#1a2a3a" stroke-width="1"/>
+            <line x1="34" y1="170" x2="375" y2="170" stroke="#1a2a3a" stroke-width="1"/>
+            <text id="yl4" x="30" y="13"  text-anchor="end" fill="#445577" font-size="9" font-family="monospace">—</text>
+            <text id="yl3" x="30" y="55"  text-anchor="end" fill="#445577" font-size="9" font-family="monospace">—</text>
+            <text id="yl2" x="30" y="97"  text-anchor="end" fill="#445577" font-size="9" font-family="monospace">—</text>
+            <text id="yl1" x="30" y="139" text-anchor="end" fill="#445577" font-size="9" font-family="monospace">—</text>
+            <text         x="30" y="173" text-anchor="end" fill="#445577" font-size="9" font-family="monospace">0</text>
+            <text x="8" y="90" fill="#445577" font-size="8" font-family="monospace" transform="rotate(-90,8,90)" text-anchor="middle">mA</text>
+            <defs>
+              <linearGradient id="cg1" x1="0" y1="0" x2="0" y2="1">
+                <stop offset="0%" stop-color="#00e676" stop-opacity=".3"/>
+                <stop offset="100%" stop-color="#00e676" stop-opacity=".02"/>
+              </linearGradient>
+              <linearGradient id="cg2" x1="0" y1="0" x2="0" y2="1">
+                <stop offset="0%" stop-color="#ff1744" stop-opacity=".22"/>
+                <stop offset="100%" stop-color="#ff1744" stop-opacity=".02"/>
+              </linearGradient>
+            </defs>
+            <polygon id="ca1" fill="url(#cg1)" points="34,170 375,170"/>
+            <polygon id="ca2" fill="url(#cg2)" points="34,170 375,170"/>
+            <polyline id="cl1" fill="none" stroke="#00e676" stroke-width="2" stroke-linejoin="round" points=""/>
+            <polyline id="cl2" fill="none" stroke="#ff1744" stroke-width="2" stroke-linejoin="round" points=""/>
+            <text id="xl0"  x="34"  y="188" text-anchor="middle" fill="#445577" font-size="8" font-family="monospace">—</text>
+            <text id="xl1"  x="118" y="188" text-anchor="middle" fill="#445577" font-size="8" font-family="monospace">—</text>
+            <text id="xl2"  x="205" y="188" text-anchor="middle" fill="#445577" font-size="8" font-family="monospace">—</text>
+            <text id="xl3"  x="292" y="188" text-anchor="middle" fill="#445577" font-size="8" font-family="monospace">—</text>
+            <text id="xl4e" x="375" y="188" text-anchor="middle" fill="#445577" font-size="8" font-family="monospace">—</text>
+          </svg>
+        </div>
+      </div>
 
-    socket.on("sensor_update", (data) => {
-      document.getElementById("current-ma").textContent = data.current_mA.toFixed(1);
-      document.getElementById("current-a").textContent = data.current_A.toFixed(3);
-      document.getElementById("adc").textContent = data.adc;
-      document.getElementById("offset").textContent = data.offset;
-      document.getElementById("timestamp").textContent = data.timestamp || "--:--:--";
+    </div>
 
-      // Status badge
-      const badge = document.getElementById("status-badge");
-      const colors = statusColors[data.status] || statusColors["No Load"];
-      badge.className = `inline-block px-4 py-1.5 rounded-full text-sm font-medium ${colors[0]} ${colors[1]}`;
-      badge.textContent = data.status;
+    <!-- RECENT ALERTS -->
+    <div class="panel">
+      <div class="ph">
+        <div class="ptitle">🔔 Recent Alerts</div>
+        <a href="#" class="va red">View All Alerts →</a>
+      </div>
+      <table class="atbl">
+        <thead>
+          <tr>
+            <th>Time</th><th>Street Name</th><th>Light No</th>
+            <th>Issue</th><th>Current (mA)</th><th>Status</th>
+          </tr>
+        </thead>
+        <tbody id="alert-body">
+          <tr><td colspan="6" class="nodata">Waiting for data from ESP32…</td></tr>
+        </tbody>
+      </table>
+    </div>
 
-      // Chart
-      history.push(data.current_mA);
-      if (history.length > MAX_POINTS) history.shift();
-      drawChart();
-    });
+  </main>
+</div>
 
-    window.addEventListener("resize", drawChart);
-  </script>
+<!-- FOOTER -->
+<footer>
+  <p>© 2025 Smart Street Light Monitoring System. All Rights Reserved.</p>
+  <div class="fl"><a href="#">f</a><a href="#">𝕏</a><a href="#">in</a></div>
+</footer>
+
+<script>
+// ══════════════════════════════════════════════
+//  SOCKET.IO
+// ══════════════════════════════════════════════
+const socket = io();
+socket.on("connect",    () => document.getElementById("conn-ind").classList.add("live"));
+socket.on("disconnect", () => document.getElementById("conn-ind").classList.remove("live"));
+
+// ══════════════════════════════════════════════
+//  SPARKLINE
+// ══════════════════════════════════════════════
+const sp1 = [], sp2 = [], MAX_SP = 20;
+
+function addSp(arr, v) { arr.push(+v); if (arr.length > MAX_SP) arr.shift(); }
+
+function drawSpark(arr, lineId, areaId, dotsId, isFault, idx) {
+  if (arr.length < 2) return;
+  const W = 160, H = 36, PAD = 3;
+  const max = Math.max(...arr, 1);
+  const pts = arr.map((v, i) => [
+    (i / (arr.length - 1)) * W,
+    PAD + (1 - v / max) * (H - PAD * 2)
+  ]);
+  const col    = isFault ? "#ff1744" : "#00e676";
+  const gradId = isFault ? `g${idx}er` : `g${idx}ok`;
+
+  document.getElementById(lineId).setAttribute("stroke", col);
+  document.getElementById(lineId).setAttribute("points", pts.map(p => p.join(",")).join(" "));
+  document.getElementById(areaId).setAttribute("fill", `url(#${gradId})`);
+  document.getElementById(areaId).setAttribute("points",
+    `0,${H} ` + pts.map(p => p.join(",")).join(" ") + ` ${W},${H}`);
+
+  const dg = document.getElementById(dotsId);
+  dg.innerHTML = "";
+  pts.filter((_, i) => i % 4 === 0 || i === pts.length - 1).forEach(([x, y]) => {
+    const c = document.createElementNS("http://www.w3.org/2000/svg", "circle");
+    c.setAttribute("cx", x); c.setAttribute("cy", y);
+    c.setAttribute("r", "2.5"); c.setAttribute("fill", col);
+    dg.appendChild(c);
+  });
+}
+
+// ══════════════════════════════════════════════
+//  MAIN CHART
+// ══════════════════════════════════════════════
+const ch1 = [], ch2 = [], chT = [], MAX_CH = 30;
+
+function addCh(l1, l2, t) {
+  ch1.push(+l1); ch2.push(+l2); chT.push(t);
+  if (ch1.length > MAX_CH) { ch1.shift(); ch2.shift(); chT.shift(); }
+}
+
+function drawChart() {
+  const n = ch1.length; if (n < 2) return;
+  const max = Math.max(...ch1, ...ch2, 1);
+  const X1=34, X2=375, YB=170, YT=10;
+  const xOf = i => X1 + (i / (n-1)) * (X2-X1);
+  const yOf = v => YB - ((v/max) * (YB-YT));
+  const p1 = ch1.map((v,i) => `${xOf(i)},${yOf(v)}`).join(" ");
+  const p2 = ch2.map((v,i) => `${xOf(i)},${yOf(v)}`).join(" ");
+  document.getElementById("cl1").setAttribute("points", p1);
+  document.getElementById("cl2").setAttribute("points", p2);
+  document.getElementById("ca1").setAttribute("points", `${X1},${YB} `+ch1.map((v,i)=>`${xOf(i)},${yOf(v)}`).join(" ")+` ${X2},${YB}`);
+  document.getElementById("ca2").setAttribute("points", `${X1},${YB} `+ch2.map((v,i)=>`${xOf(i)},${yOf(v)}`).join(" ")+` ${X2},${YB}`);
+  const step = max/4;
+  ["yl1","yl2","yl3","yl4"].forEach((id,k) => { document.getElementById(id).textContent = Math.round(step*(k+1)); });
+  ["xl0","xl1","xl2","xl3","xl4e"].forEach((id,j) => {
+    const idx = Math.round((j/4)*(n-1));
+    document.getElementById(id).textContent = chT[idx] || "";
+  });
+}
+
+// ══════════════════════════════════════════════
+//  ALERTS
+// ══════════════════════════════════════════════
+const alertRows = [];
+
+function issueText(d) {
+  if (d.led1_fault && d.led2_fault) return "Both Lights Fault";
+  if (d.led1_fault) return "Light Fused / No Load";
+  if (d.led2_fault) return "Light Fused / No Load";
+  return "Resolved";
+}
+
+function renderAlerts() {
+  const tb = document.getElementById("alert-body");
+  if (!alertRows.length) {
+    tb.innerHTML = `<tr><td colspan="6" class="nodata">No faults recorded yet.</td></tr>`;
+    return;
+  }
+  tb.innerHTML = alertRows.map(r => {
+    const lightNo = r.led1_fault ? r.light1_id : r.light2_id;
+    const current = r.led1_fault ? r.led1_current : r.led2_current;
+    const isFault = r.system_status !== "ALL_WORKING";
+    return `<tr>
+      <td>${r.timestamp}</td>
+      <td style="color:var(--txt);font-family:var(--ff)">${r.street}</td>
+      <td>${lightNo}</td>
+      <td style="color:var(--txt);font-family:var(--ff)">${issueText(r)}</td>
+      <td>${current}</td>
+      <td><span class="tag ${isFault ? 'f' : 'ok'}">${isFault ? 'FAULT' : 'OK'}</span></td>
+    </tr>`;
+  }).join("");
+}
+
+function addAlertRow(d) {
+  alertRows.unshift(d);
+  if (alertRows.length > 10) alertRows.pop();
+  renderAlerts();
+}
+
+// ══════════════════════════════════════════════
+//  TOAST
+// ══════════════════════════════════════════════
+function showToast(title, msg, isOk) {
+  const c = document.getElementById("toast");
+  const d = document.createElement("div");
+  d.className = "ti" + (isOk ? " ok" : "");
+  d.innerHTML = `<div class="tt">${title}</div><div class="tm">${msg}</div>`;
+  c.prepend(d);
+  setTimeout(() => d.remove(), 5000);
+}
+
+// ══════════════════════════════════════════════
+//  MAIN UPDATE FUNCTION
+// ══════════════════════════════════════════════
+let prevStatus = null;
+
+function updateUI(d) {
+  // LED 1
+  document.getElementById("tag1").textContent  = d.street;
+  document.getElementById("lno1").textContent  = "Light No: " + d.light1_id;
+  document.getElementById("val1").textContent  = d.led1_current + " mA";
+  document.getElementById("upd1").textContent  = "Last Update: " + d.timestamp;
+  const c1 = document.getElementById("card1");
+  const b1 = document.getElementById("badge1");
+  if (d.led1_fault) {
+    c1.classList.add("fault");
+    b1.className = "sbadge fault"; b1.textContent = "FAULT – FUSED";
+    document.getElementById("bulb1").textContent = "🔆";
+  } else {
+    c1.classList.remove("fault");
+    b1.className = "sbadge ok"; b1.textContent = "WORKING";
+    document.getElementById("bulb1").textContent = "💡";
+  }
+
+  // LED 2
+  document.getElementById("tag2").textContent  = d.street;
+  document.getElementById("lno2").textContent  = "Light No: " + d.light2_id;
+  document.getElementById("val2").textContent  = d.led2_current + " mA";
+  document.getElementById("upd2").textContent  = "Last Update: " + d.timestamp;
+  const c2 = document.getElementById("card2");
+  const b2 = document.getElementById("badge2");
+  if (d.led2_fault) {
+    c2.classList.add("fault");
+    b2.className = "sbadge fault"; b2.textContent = "FAULT – FUSED";
+    document.getElementById("bulb2").textContent = "🔆";
+  } else {
+    c2.classList.remove("fault");
+    b2.className = "sbadge ok"; b2.textContent = "WORKING";
+    document.getElementById("bulb2").textContent = "💡";
+  }
+
+  // Sparklines
+  addSp(sp1, d.led1_current); addSp(sp2, d.led2_current);
+  drawSpark(sp1,"line1","area1","dots1",d.led1_fault,1);
+  drawSpark(sp2,"line2","area2","dots2",d.led2_fault,2);
+
+  // Chart
+  addCh(d.led1_current, d.led2_current, d.timestamp);
+  drawChart();
+
+  // Stats
+  const faults  = (d.led1_fault?1:0) + (d.led2_fault?1:0);
+  document.getElementById("s-working").textContent = 2 - faults;
+  document.getElementById("s-fault").textContent   = faults;
+  document.getElementById("s-power").textContent   = (+d.led1_current + +d.led2_current).toFixed(1) + " mA";
+  document.getElementById("s-street").textContent  = "1";
+  document.getElementById("fault-count").textContent = faults;
+
+  // Alerts
+  addAlertRow(d);
+
+  // Toast on change
+  if (prevStatus !== null && d.system_status !== prevStatus) {
+    if (d.system_status !== "ALL_WORKING")
+      showToast("⚠ FAULT DETECTED", d.street + " – " + d.system_status.replace(/_/g," "));
+    else
+      showToast("✓ System Restored", "All lights on " + d.street + " working fine", true);
+  }
+  prevStatus = d.system_status;
+}
+
+socket.on("sensor_update", updateUI);
+
+// ══════════════════════════════════════════════
+//  LOAD HISTORY ON PAGE OPEN
+// ══════════════════════════════════════════════
+fetch("/api/history").then(r=>r.json()).then(data=>{
+  data.forEach(p=>{ addCh(p.l1,p.l2,p.t); addSp(sp1,p.l1); addSp(sp2,p.l2); });
+  if (data.length){ drawChart(); drawSpark(sp1,"line1","area1","dots1",false,1); drawSpark(sp2,"line2","area2","dots2",false,2); }
+}).catch(()=>{});
+
+fetch("/api/alerts").then(r=>r.json()).then(data=>{
+  data.forEach(a=>alertRows.push(a));
+  if (alertRows.length) renderAlerts();
+}).catch(()=>{});
+
+// ══════════════════════════════════════════════
+//  CLOCK
+// ══════════════════════════════════════════════
+function tick(){
+  const n=new Date();
+  document.getElementById("cdate").textContent=n.toLocaleDateString("en-GB",{day:"numeric",month:"long",year:"numeric"});
+  document.getElementById("ctime").textContent=n.toLocaleTimeString("en-US",{hour:"2-digit",minute:"2-digit",second:"2-digit"});
+}
+tick(); setInterval(tick,1000);
+</script>
 </body>
 </html>
