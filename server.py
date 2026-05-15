@@ -21,9 +21,9 @@ from email.mime.multipart import MIMEMultipart
 # ─────────────────────────────────────────────
 #  CONFIG
 # ─────────────────────────────────────────────
-EMAIL_FROM = "agentakram007@gmail.com"
-EMAIL_PASS = "vomnvrrdyeegoehi"   # Gmail App Password (16-char)
-EMAIL_TO   = "izonakassistant@gmail.com"
+EMAIL_FROM = "example@gmail.com"
+EMAIL_PASS = "password"   # Gmail App Password (16-char)
+EMAIL_TO   = "example@gmail.com"
 
 # ─────────────────────────────────────────────
 app      = Flask(__name__)
